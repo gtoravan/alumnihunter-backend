@@ -7,8 +7,6 @@ import csv
 
 
 
-SECRET = os.getenv("SECRET")
-
 app = FastAPI()
 
 app.add_middleware(
@@ -18,11 +16,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
-
-
-class Msg(BaseModel):
-    msg: str
-    secret: str
 
 @app.get("/")
 
