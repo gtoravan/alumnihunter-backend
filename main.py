@@ -1,5 +1,4 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
-from extract import *
 import os
 from fastapi.middleware.cors import CORSMiddleware
 from linkedin_scraper import run_data
