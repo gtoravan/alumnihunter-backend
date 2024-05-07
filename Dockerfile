@@ -2,7 +2,8 @@ ARG PORT=443
 
 FROM cypress/browsers:latest
 
-# Install Python and necessary tools
+
+# Install necessary packages including curl
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
@@ -20,8 +21,9 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
     && apt-get update \
     && apt-get install -y google-chrome-stable
 
-# Install ChromeDriver
-RUN CHROME_DRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE) \
+# Determine Chrome version and download corresponding ChromeDriver
+RUN CHROME_VERSION=$(google-chrome --version | cut -f 3 -d ' ' | cut -d '.' -f 1,2,3) \
+    && CHROME_DRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION") \
     && wget -N "http://chromedriver.storage.googleapis.com/$CHROME_DRIVER_VERSION/chromedriver_linux64.zip" -P ~/ \
     && unzip ~/chromedriver_linux64.zip -d ~/ \
     && rm ~/chromedriver_linux64.zip \
