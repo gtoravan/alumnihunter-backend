@@ -4,3 +4,4 @@ uvicorn==0.29.0
 selenium==4.20.0
 regex== 2024.4.28
 bs4==0.0.2
+pydantic==2.7.1

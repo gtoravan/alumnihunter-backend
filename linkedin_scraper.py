@@ -4,6 +4,7 @@ import time
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 
 def scrape_job_info(job_link, browser):
     browser.get(job_link)
@@ -130,7 +131,18 @@ def run_page(url,browser):
 
 
 def run_data(pages):
-    browser = webdriver.Chrome()
+    # Set up Chrome options
+    chrome_options = Options()
+    chrome_options.add_argument("start-maximized")  # Opens the browser in maximized mode
+    chrome_options.add_argument("disable-infobars")  # Disables the information bars
+    chrome_options.add_argument("--disable-extensions")  # Disables extensions
+    chrome_options.add_argument("--disable-gpu")  # Disables GPU hardware acceleration
+    chrome_options.add_argument("--disable-dev-shm-usage")  # Overcomes limited resource problems
+
+    # Instantiate a Chrome browser object with the specified options
+    browser = webdriver.Chrome(options=chrome_options)
+
+    # Open the LinkedIn login page
     browser.get("https://www.linkedin.com/login")
 
     file = open("config.txt")
