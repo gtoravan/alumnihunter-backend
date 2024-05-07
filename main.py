@@ -1,5 +1,4 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
-from pydantic import BaseModel
 from extract import *
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,13 +29,6 @@ class Msg(BaseModel):
 
 async def root():
     return {"message": "Hello World. Welcome to FastAPI!"}
-
-
-@app.post("/backgroundDemo")
-async def demo_post(inp: Msg, background_tasks: BackgroundTasks):
-    
-    background_tasks.add_task(doBackgroundTask, inp)
-    return {"message": "Success, background task started"}
 
 
 # Add another endpoint to download the CSV file
