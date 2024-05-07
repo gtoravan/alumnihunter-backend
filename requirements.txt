@@ -13,7 +13,6 @@ typing_extensions==4.3.0
 watchfiles==0.16.1
 websockets==10.3
 requests==2.28.1
-webdriver_manager==3.8.4
 urllib3==1.26.8
 Pillow==9.3.0
 packaging==21.3
