@@ -132,17 +132,7 @@ def run_page(url,browser):
 
 def run_data(pages):
     # Set up Chrome options
-    chrome_options = Options()
-    chrome_options.add_argument("start-maximized")  # Opens the browser in maximized mode
-    chrome_options.add_argument("disable-infobars")  # Disables the information bars
-    chrome_options.add_argument("--disable-extensions")  # Disables extensions
-    chrome_options.add_argument("--disable-gpu")  # Disables GPU hardware acceleration
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Overcomes limited resource problems
-
-    # Instantiate a Chrome browser object with the specified options
-    browser = webdriver.Chrome(options=chrome_options)
-
-    # Open the LinkedIn login page
+    browser = webdriver.Chrome()
     browser.get("https://www.linkedin.com/login")
 
     file = open("config.txt")
