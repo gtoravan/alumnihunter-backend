@@ -1,3 +1,5 @@
+import threading
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,19 +48,9 @@ async def say_hello(name: str):
 @app.get("/run_data/{pages}")
 async def root(pages: int):
     # Get data from run_data function
-    data = run_data(pages)
-
-    # Define the file path where the CSV file will be saved
-    file_path = "data.csv"
-
-    # Write the data to a CSV file
-    with open(file_path, mode='w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=data[0].keys())  # Assuming data is a list of dictionaries
-        writer.writeheader()
-        writer.writerows(data)
-
+    thread = threading.Thread(target=run_data, args=(pages,))
+    thread.start()
     # Return the data as JSON
-    return {"data": data}
-    
+    return {"message": "Scraping process started"}
 
 

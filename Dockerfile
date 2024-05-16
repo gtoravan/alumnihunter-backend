@@ -1,45 +1,39 @@
-ARG PORT=443
+# Use Python 3.8 image as the base
+FROM python:3.8
 
-FROM cypress/browsers:latest
-
-
-# Install necessary packages including curl
+# Install Chromium, Chromedriver, and other necessary packages
 RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
     curl \
     wget \
-    gnupg2 \
     unzip \
     xvfb \
     libxi6 \
-    libgconf-2-4 \
-    python3 \
-    python3-pip
+    libgconf-2-4
 
-# Install Google Chrome
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable
+# Set up environment variables
+ENV DISPLAY=:99
 
-# Install specific version of ChromeDriver
-RUN CHROME_DRIVER_VERSION="124.0.6367.155" \
-    && wget -N "http://chromedriver.storage.googleapis.com/$CHROME_DRIVER_VERSION/chromedriver_linux64.zip" -P ~/ \
-    && unzip ~/chromedriver_linux64.zip -d ~/ \
-    && rm ~/chromedriver_linux64.zip \
-    && mv -f ~/chromedriver /usr/local/bin/chromedriver \
-    && chown root:root /usr/local/bin/chromedriver \
-    && chmod 0755 /usr/local/bin/chromedriver
+# Set up the working directory
+WORKDIR /app
+
+# Copy local files to the app directory
+COPY . /app
 
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install annotated-types==0.6.0 \
+    fastapi==0.109.0 \
+    uvicorn==0.29.0 \
+    selenium==4.20.0 \
+    regex==2024.4.28 \
+    bs4==0.0.2
 
-# Set PATH environment variable
-ENV PATH /home/root/.local/bin:${PATH}
+# Expose the necessary port
+EXPOSE 443
 
-# Copy application code
-COPY . .
+# Command to run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "443"]
 
-# Command to start Uvicorn with the application
-CMD uvicorn main:app --host 0.0.0.0 --port $PORT
+# sudo docker build --no-cache -t sel .

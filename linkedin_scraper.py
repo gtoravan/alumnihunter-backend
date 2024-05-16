@@ -1,10 +1,15 @@
+import csv
+
 from bs4 import BeautifulSoup
 import re
 import time
 
-from selenium import webdriver
 from selenium.webdriver.common.by import By
+
+from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+
 
 def scrape_job_info(job_link, browser):
     browser.get(job_link)
@@ -129,10 +134,20 @@ def run_page(url,browser):
 
     return job_list
 
+def create_webdriver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_prefs = {}
+    chrome_options.experimental_options["prefs"] = chrome_prefs
+    chrome_prefs["profile.default_content_settings"] = {"images": 2}
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
 
 def run_data(pages):
     # Set up Chrome options
-    browser = webdriver.Chrome()
+    browser = docker_driver()
     browser.get("https://www.linkedin.com/login")
 
     file = open("config.txt")
@@ -156,6 +171,23 @@ def run_data(pages):
         page_job_list = run_page(url,browser)
         main_list.extend(page_job_list)
 
+    # Define the file path where the CSV file will be saved
+    file_path = "data.csv"
+
+    # Write the data to a CSV file
+    with open(file_path, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=main_list[0].keys())  # Assuming data is a list of dictionaries
+        writer.writeheader()
+        writer.writerows(main_list)
+
     return main_list
 
-
+def docker_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run headless if you don't need a GUI
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    driver_path = '/usr/bin/chromedriver'
+    service = Service(executable_path=driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    return driver
