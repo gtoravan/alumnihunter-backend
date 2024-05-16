@@ -2,11 +2,9 @@ services:
   deployment:
     build:
       context: .
-      Dockerfile: Dockerfile.development
     ports:
-      - "8000:443"
-    command: uvicorn main:app --host 0.0.0.0 --port 443
-    image: sel  # Assuming you tagged it with 'sel' as per your command
+      - "443:443"
+    image: sel
 #  app:
 #    build:
 #      context: .
