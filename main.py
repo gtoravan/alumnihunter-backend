@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from linkedin_scraper import run_data
 from fastapi.responses import JSONResponse, FileResponse
 import csv
+from test import scrape_example_website
 
 
 
@@ -53,4 +54,8 @@ async def root(pages: int):
     # Return the data as JSON
     return {"message": "Scraping process started"}
 
+@app.get("/test")
+async def test():
+    ans = scrape_example_website()
+    return {"message": ans}
 

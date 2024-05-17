@@ -171,6 +171,9 @@ def run_data(pages):
         page_job_list = run_page(url,browser)
         main_list.extend(page_job_list)
 
+    if not main_list:
+        print("No data was scraped.")
+
     # Define the file path where the CSV file will be saved
     file_path = "data.csv"
 

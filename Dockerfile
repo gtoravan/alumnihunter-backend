@@ -3,6 +3,8 @@ FROM python:3.8
 
 # Install Chromium, Chromedriver, and other necessary packages
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
     chromium \
     chromium-driver \
     curl \
@@ -10,7 +12,10 @@ RUN apt-get update && apt-get install -y \
     unzip \
     xvfb \
     libxi6 \
-    libgconf-2-4
+    libgconf-2-4 && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install selenium webdriver-manager
+
 
 # Set up environment variables
 ENV DISPLAY=:99
