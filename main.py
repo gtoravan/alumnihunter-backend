@@ -9,9 +9,9 @@ import csv
 
 
 
-application = FastAPI()
+app = FastAPI()
 
-application.add_middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # You can replace "*" with your frontend domain
     allow_credentials=True,
@@ -19,14 +19,14 @@ application.add_middleware(
     allow_headers=["*"],
 )
 
-@application.get("/")
+@app.get("/")
 
 async def root():
     return {"message": "Hello World. Welcome to FastAPI!"}
 
 
 # Add another endpoint to download the CSV file
-@application.get("/download_csv")
+@app.get("/download_csv")
 async def download_csv():
     # Define the file path where the CSV file is located
     file_path = "data.csv"
@@ -40,12 +40,12 @@ async def download_csv():
     return JSONResponse(content={"data": data})
 
 
-@application.get("/hello/{name}")
+@app.get("/hello/{name}")
 async def say_hello(name: str):
     return {"message": f"Hello {name}"}
 
 # operational method
-@application.get("/run_data/{pages}")
+@app.get("/run_data/{pages}")
 async def root(pages: int):
     # Get data from run_data function
     thread = threading.Thread(target=run_data, args=(pages,))
