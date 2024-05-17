@@ -17,7 +17,8 @@ def scrape_example_website():
     # Navigate to the website and perform actions
     driver.get("https://www.example.com")
     print("Title:", driver.title)
+    ret = driver.title
 
     # Clean up: close the browser window
     driver.quit()
-    return driver.title
+    return ret
