@@ -31,7 +31,7 @@ jobs:
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: Docker-build
+          application_name: docker-build
           environment_name: Docker-build-env
           version_label: "alumni-deployment-${{ steps.format-time.outputs.replaced }}"
           region: us-east-2
