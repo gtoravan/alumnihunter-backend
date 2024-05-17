@@ -16,9 +16,8 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/* && \
     pip3 install selenium webdriver-manager
 
-
 # Set up environment variables
-ENV DISPLAY=:99
+ENV DISPLAY=:0
 
 # Set up the working directory
 WORKDIR /app
@@ -26,9 +25,8 @@ WORKDIR /app
 # Copy local files to the app directory
 COPY . /app
 
-
 # Install Python dependencies
-RUN pip install annotated-types==0.6.0 \
+RUN pip install --no-cache-dir \
     fastapi==0.109.0 \
     uvicorn==0.29.0 \
     selenium==4.20.0 \
@@ -41,4 +39,5 @@ EXPOSE 443
 # Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "443"]
 
+# Build command (added as a comment for reference)
 # sudo docker build --no-cache -t sel .
