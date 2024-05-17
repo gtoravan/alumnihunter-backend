@@ -54,8 +54,8 @@ async def root(pages: int):
     # Return the data as JSON
     return {"message": "Scraping process started"}
 
+
 @app.get("/test")
-async def test():
-    ans = scrape_example_website()
-    return {"message": ans}
+async def test_endpoint():
+    return {"message": scrape_example_website()}
 
