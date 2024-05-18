@@ -7,6 +7,18 @@ from linkedin_scraper import run_data
 from fastapi.responses import JSONResponse, FileResponse
 import csv
 from test import scrape_example_website
+import threading
+import logging
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import csv
+import time
+import os
 
 
 
@@ -20,8 +32,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+verification_code = None
 
+class Code(BaseModel):
+    code: str
+
+@app.post("/submit_code/")
+async def submit_code(code: Code):
+    with open("code.txt", "w") as f:
+        f.write(code.code)
+    return {"message": "Verification code received"}
+
+@app.get("/")
 async def root():
     return {"message": "Hello World. Welcome to FastAPI!"}
 
