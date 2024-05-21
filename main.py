@@ -21,8 +21,7 @@ import time
 import os
 
 
-
-app = FastAPI()
+app = FastAPI(ssl_keyfile="/etc/letsencrypt/live/api.alumnihunter.com/privkey.pem", ssl_certfile="/etc/letsencrypt/live/api.alumnihunter.com/fullchain.pem")
 
 app.add_middleware(
     CORSMiddleware,
