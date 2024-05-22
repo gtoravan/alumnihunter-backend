@@ -10,6 +10,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 import logging
 import time
 
+
 logging.basicConfig(level=logging.INFO)
 
 
@@ -177,25 +178,32 @@ def run_data(pages):
 
     if "checkpoint" in browser.current_url:
         logging.info("Security verification required")
-        logging.info("Waiting for 30 seconds to fetch the verification code")
-        time.sleep(30)
+
+        # Wait for user to generate and save the 2FA code to 'code.txt'
+        logging.info("Waiting for user to provide 2FA code")
         while not os.path.exists("code.txt"):
             time.sleep(1)
+
         with open("code.txt", "r") as file:
             pin = file.read().strip()
+            logging.info(f"2FA Code read from file: {pin}")  # Log the code for debugging
+
+        # Input and submit 2FA code
         try:
-            pin_input = browser.find_element(By.ID, 'input__email_verification_pin')
+            pin_input = browser.find_element(By.ID, 'input__phone_verification_pin')
             pin_input.send_keys(pin)
-            submit_button = browser.find_element(By.ID, 'email-pin-submit-button')
+            logging.info(f"2FA Code entered in the text box: {pin}")  # Log the code being entered
+            submit_button = browser.find_element(By.ID, 'two-step-submit-button')
             submit_button.click()
-            logging.info("Submitted verification code")
+            logging.info("Submitted 2FA code")
             time.sleep(5)
         except Exception as e:
-            logging.error(f"Failed to submit verification code: {e}")
+            logging.error(f"Failed to submit 2FA code: {e}")
             logging.info("HTML content of the page:")
             logging.info(browser.page_source)
             return
 
+        # Check if login was successful
         if "feed" not in browser.current_url:
             logging.error("Verification failed")
             logging.info("HTML content of the page:")
@@ -245,3 +253,9 @@ def docker_driver():
     service = ChromeService(executable_path=ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     return driver
+
+
+# scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/linkedin_scraper.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
+#
+# scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/main.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
+# scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/chatgpt_processing.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
