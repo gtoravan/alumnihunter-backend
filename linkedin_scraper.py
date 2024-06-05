@@ -10,28 +10,34 @@ from webdriver_manager.chrome import ChromeDriverManager
 import logging
 import time
 
-
 logging.basicConfig(level=logging.INFO)
-
 
 def create_webdriver():
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--remote-debugging-port=9222")
     chrome_prefs = {}
     chrome_options.experimental_options["prefs"] = chrome_prefs
     chrome_prefs["profile.default_content_settings"] = {"images": 2}
-    driver = webdriver.Chrome(options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options, service=ChromeService(ChromeDriverManager().install()))
+    driver.set_page_load_timeout(120)
+    driver.set_script_timeout(120)
     return driver
-
 
 def scrape_job_info(job_link, browser):
     try:
         browser.get(job_link)
-        time.sleep(3)  # Adding a delay to ensure the page loads completely
+        time.sleep(5)  # Adding a delay to ensure the page loads completely
         html_content = browser.page_source
         soup = BeautifulSoup(html_content, "html.parser")
+
+        # Check if the job is no longer accepting applications
+        closed_job_tag = soup.find("div", class_="jobs-details-top-card__apply-error")
+        if closed_job_tag and "No longer accepting applications" in closed_job_tag.text:
+            logging.info(f"Job is closed: {job_link}")
+            return None  # Skip this job
 
         # Extract job title
         title_tag = soup.find("title")
@@ -77,86 +83,95 @@ def scrape_job_info(job_link, browser):
         return job_info
     except Exception as e:
         logging.error(f"Error in scrape_job_info: {e}")
-        return {}
+        return None
 
 def run_page(url, browser):
-    try:
-        browser.get(url)
-        time.sleep(5)
-        content = browser.page_source
-        soup = BeautifulSoup(content, 'html.parser')
+    retries = 3
+    for attempt in range(retries):
+        try:
+            logging.info(f"Attempting to load page {url} (Attempt {attempt + 1}/{retries})")
+            browser.get(url)
+            time.sleep(10)
+            content = browser.page_source
+            soup = BeautifulSoup(content, 'html.parser')
 
-        all_sections = soup.find_all('li', {'class': 'reusable-search__result-container'})
-        logging.info(f"Found {len(all_sections)} sections")
+            all_sections = soup.find_all('li', {'class': 'reusable-search__result-container'})
+            logging.info(f"Found {len(all_sections)} sections")
 
-        profilesID = []
-        for link in all_sections:
-            if link is None:
-                continue  # Skip None elements
-            soup = BeautifulSoup(str(link), 'html.parser')
-            a_tag = soup.find('div', class_='display-flex').find('a')
-            if a_tag:
-                href_value = a_tag['href']
-                profilesID.append(href_value)
-        logging.info(f"Profile IDs: {profilesID}")
+            profilesID = []
+            for link in all_sections:
+                if link is None:
+                    continue  # Skip None elements
+                soup = BeautifulSoup(str(link), 'html.parser')
+                a_tag = soup.find('div', class_='display-flex').find('a')
+                if a_tag:
+                    href_value = a_tag['href']
+                    profilesID.append(href_value)
+            logging.info(f"Profile IDs: {profilesID}")
 
-        job_data = {}
-        for profile in profilesID:
-            browser.get(profile)
-            time.sleep(3)
-            html_content = browser.page_source
-            soup = BeautifulSoup(html_content, "html.parser")
-            job_section = soup.find("section", class_="artdeco-card pv-open-to-carousel-card pv-open-to-carousel-card--enrolled pv-open-to-carousel-card--single")
-            profile_job_data = []
-            if job_section:
-                job_link_element = job_section.find("a", class_="app-aware-link")
-                if job_link_element:
-                    job_link = job_link_element["href"]
-                    if re.match(r".*/jobs/view/.*", job_link):
-                        profile_job_data.append(job_link)
-                else:
-                    job_links = soup.find_all("a", class_="job-card-container__link")
-                    job_posting_links = [link["href"] for link in job_links]
-                    for job_link in job_posting_links:
+            job_data = {}
+            for profile in profilesID:
+                browser.get(profile)
+                time.sleep(5)
+                html_content = browser.page_source
+                soup = BeautifulSoup(html_content, "html.parser")
+                job_section = soup.find("section", class_="artdeco-card pv-open-to-carousel-card pv-open-to-carousel-card--enrolled pv-open-to-carousel-card--single")
+                profile_job_data = []
+                if job_section:
+                    job_link_element = job_section.find("a", class_="app-aware-link")
+                    if job_link_element:
+                        job_link = job_link_element["href"]
                         if re.match(r".*/jobs/view/.*", job_link):
-                            job_link = "https://www.linkedin.com" + job_link
                             profile_job_data.append(job_link)
-            job_data[profile] = profile_job_data
-        logging.info(f"Job data: {job_data}")
+                    else:
+                        job_links = soup.find_all("a", class_="job-card-container__link")
+                        job_posting_links = [link["href"] for link in job_links]
+                        for job_link in job_posting_links:
+                            if re.match(r".*/jobs/view/.*", job_link):
+                                job_link = "https://www.linkedin.com" + job_link
+                                profile_job_data.append(job_link)
+                job_data[profile] = profile_job_data
+            logging.info(f"Job data: {job_data}")
 
-        job_info_dict = {}
-        for profile_url, job_urls in job_data.items():
-            for job_url in job_urls:
-                job_info = scrape_job_info(job_url, browser)
-                job_info_dict[job_url] = job_info
+            job_info_dict = {}
+            for profile_url, job_urls in job_data.items():
+                for job_url in job_urls:
+                    job_info = scrape_job_info(job_url, browser)
+                    if job_info:
+                        job_info_dict[job_url] = job_info
 
-        job_list = []
-        for profile_url, job_urls in job_data.items():
-            for job_url in job_urls:
-                if job_url in job_info_dict:
-                    job_info = job_info_dict[job_url]
-                    job_object = {
-                        "title": job_info.get("job_title"),
-                        "salary": job_info.get("salary_range"),
-                        "skills": job_info.get("skills"),
-                        "description": job_info.get("job_description"),
-                        "alumni_profile_link": profile_url,
-                        "job_link": job_url,
-                        "location": job_info.get("location"),
-                        "level": job_info.get("level"),
-                        "company": job_info.get("company")
-                    }
-                    job_list.append(job_object)
-        logging.info(f"Job list: {job_list}")
+            job_list = []
+            for profile_url, job_urls in job_data.items():
+                for job_url in job_urls:
+                    if job_url in job_info_dict:
+                        job_info = job_info_dict[job_url]
+                        job_object = {
+                            "title": job_info.get("job_title"),
+                            "salary": job_info.get("salary_range"),
+                            "skills": job_info.get("skills"),
+                            "description": job_info.get("job_description"),
+                            "alumni_profile_link": profile_url,
+                            "job_link": job_url,
+                            "location": job_info.get("location"),
+                            "level": job_info.get("level"),
+                            "company": job_info.get("company")
+                        }
+                        job_list.append(job_object)
+            logging.info(f"Job list: {job_list}")
 
-        return job_list
-    except Exception as e:
-        logging.error(f"Error in run_page: {e}")
-        return []
+            return job_list
+        except Exception as e:
+            logging.error(f"Error in run_page: {e}")
+            if attempt < retries - 1:
+                logging.info("Retrying...")
+                time.sleep(10)
+            else:
+                logging.error("All retries failed")
+                return []
 
 def run_data(pages):
     logging.info("Starting scraping process")
-    browser = docker_driver()
+    browser = create_webdriver()
     browser.get("https://www.linkedin.com/login")
 
     # Read credentials from config.txt
@@ -179,40 +194,20 @@ def run_data(pages):
     if "checkpoint" in browser.current_url:
         logging.info("Security verification required")
 
-        # Wait for user to generate and save the 2FA code to 'code.txt'
-        logging.info("Waiting for user to provide 2FA code")
-        while not os.path.exists("code.txt"):
-            time.sleep(1)
+        # Add a sleep call to give you time to verify on the phone
+        logging.info("Please verify the login attempt on your phone...")
+        time.sleep(20)  # 20 seconds pause for phone verification
 
-        with open("code.txt", "r") as file:
-            pin = file.read().strip()
-            logging.info(f"2FA Code read from file: {pin}")  # Log the code for debugging
-
-        # Input and submit 2FA code
-        try:
-            pin_input = browser.find_element(By.ID, 'input__phone_verification_pin')
-            pin_input.send_keys(pin)
-            logging.info(f"2FA Code entered in the text box: {pin}")  # Log the code being entered
-            submit_button = browser.find_element(By.ID, 'two-step-submit-button')
-            submit_button.click()
-            logging.info("Submitted 2FA code")
-            time.sleep(5)
-        except Exception as e:
-            logging.error(f"Failed to submit 2FA code: {e}")
-            logging.info("HTML content of the page:")
-            logging.info(browser.page_source)
-            return
-
-        # Check if login was successful
+        # Check if login was successful after phone verification
         if "feed" not in browser.current_url:
             logging.error("Verification failed")
             logging.info("HTML content of the page:")
             logging.info(browser.page_source)
             return
         else:
-            logging.info("Verification successful")
+            logging.info("Verification successful via phone")
 
-    base_url = "https://www.linkedin.com/search/results/people/?activelyHiring=%22true%22&heroEntityKey=urn%3Ali%3Aorganization%3A6502&keywords=University%20at%20Buffalo&origin=FACETED_SEARCH&page={}&sid=2ET"
+    base_url = "https://www.linkedin.com/search/results/people/?activelyHiring=%22true%22&heroEntityKey=urn%3Ali%3Aorganization%3A6502&keywords=University%20at%20Buffalo&origin=FACETED_SEARCH&page={}&sid=gDb"
 
     main_list = []
     for page_number in range(1, pages + 1):
@@ -253,7 +248,6 @@ def docker_driver():
     service = ChromeService(executable_path=ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     return driver
-
 
 # scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/linkedin_scraper.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
 #

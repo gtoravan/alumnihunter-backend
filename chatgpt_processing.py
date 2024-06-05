@@ -7,7 +7,7 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 client = OpenAI(
-    api_key='key',  # Use environment variables or secure methods to handle API keys
+    api_key='',  # Use environment variables or secure methods to handle API keys
 )
 
 def extract_skills_with_gpt(description):
