@@ -177,5 +177,5 @@ def refine_job_listings(university_name):
     except Exception as e:
         logging.error(f"An error occurred while processing the data: {e}")
 
-if __name__ == '__main__':
-    refine_job_listings("example_university")
+# if __name__ == '__main__':
+#     refine_job_listings("example_university")
