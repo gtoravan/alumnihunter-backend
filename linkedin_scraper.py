@@ -203,9 +203,56 @@ def run_data(pages):
             logging.error("Verification failed")
             logging.info("HTML content of the page:")
             logging.info(browser.page_source)
-            return
+
+            # Try to input OTP if required
+            try:
+                with open("code.txt", "r") as file:
+                    pin = file.read().strip()
+                    logging.info(f"2FA Code read from file: {pin}")  # Log the code for debugging
+
+                # Input and submit 2FA code
+                try:
+                    pin_input = browser.find_element(By.ID, 'input__phone_verification_pin')
+                    pin_input.send_keys(pin)
+                    logging.info(f"2FA Code entered in the text box: {pin}")  # Log the code being entered
+                    submit_button = browser.find_element(By.ID, 'two-step-submit-button')
+                    submit_button.click()
+                    logging.info("Submitted 2FA code")
+                    time.sleep(5)
+                except Exception as e:
+                    logging.error(f"Failed to submit 2FA code: {e}")
+                    logging.info("HTML content of the page:")
+                    logging.info(browser.page_source)
+                    return
+            except Exception as e:
+                logging.error(f"2FA Code not found or could not be read: {e}")
+                return
         else:
             logging.info("Verification successful via phone")
+    else:
+        # Check for 2FA OTP input
+        try:
+            with open("code.txt", "r") as file:
+                pin = file.read().strip()
+                logging.info(f"2FA Code read from file: {pin}")  # Log the code for debugging
+
+            # Input and submit 2FA code
+            try:
+                pin_input = browser.find_element(By.ID, 'input__phone_verification_pin')
+                pin_input.send_keys(pin)
+                logging.info(f"2FA Code entered in the text box: {pin}")  # Log the code being entered
+                submit_button = browser.find_element(By.ID, 'two-step-submit-button')
+                submit_button.click()
+                logging.info("Submitted 2FA code")
+                time.sleep(5)
+            except Exception as e:
+                logging.error(f"Failed to submit 2FA code: {e}")
+                logging.info("HTML content of the page:")
+                logging.info(browser.page_source)
+                return
+        except Exception as e:
+            logging.error(f"2FA Code not found or could not be read: {e}")
+            return
 
     base_url = "https://www.linkedin.com/search/results/people/?activelyHiring=%22true%22&heroEntityKey=urn%3Ali%3Aorganization%3A6502&keywords=University%20at%20Buffalo&origin=FACETED_SEARCH&page={}&sid=gDb"
 
@@ -221,7 +268,8 @@ def run_data(pages):
         return
 
     # Define the file path where the CSV file will be saved
-    file_path = "data.csv"
+    os.makedirs("data/university1", exist_ok=True)
+    file_path = "data/university1/data.csv"
 
     # Write the data to a CSV file
     try:
@@ -249,7 +297,5 @@ def docker_driver():
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
-# scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/linkedin_scraper.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
-#
-# scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/main.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
-# scp -i "backend.pem" -r /Users/gauravtoravane/Documents/alumnihunter-backend/alumnihunter-backend/chatgpt_processing.py  ec2-user@ec2-3-13-48-46.us-east-2.compute.amazonaws.com:/home/ec2-user/alumnihunter-backend
+# if __name__ == "__main__":
+#     run_data(2)

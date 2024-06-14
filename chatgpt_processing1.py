@@ -121,7 +121,7 @@ def extract_info_with_gpt(text, prompt_description, max_tokens):
 
 def refine_job_listings(university_name):
     try:
-        data_path = f"data.csv"
+        data_path = f"data/{university_name}/data.csv"
         refined_data_path = f"data/{university_name}/refined_data.csv"
 
         if not os.path.exists(data_path):

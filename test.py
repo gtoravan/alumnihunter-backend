@@ -22,3 +22,6 @@ def scrape_example_website():
     # Clean up: close the browser window
     driver.quit()
     return ret
+
+
+logging.basicConfig(filename='scraping.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

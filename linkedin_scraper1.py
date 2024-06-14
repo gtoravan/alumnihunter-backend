@@ -9,12 +9,20 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('scraping.log'),
+        logging.StreamHandler()
+    ]
+)
 
 def create_webdriver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    # chrome_options.add_argument("--headless")  # Comment out this line to run in non-headless mode
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--remote-debugging-port=9222")
@@ -22,12 +30,13 @@ def create_webdriver():
     chrome_options.experimental_options["prefs"] = chrome_prefs
     chrome_prefs["profile.default_content_settings"] = {"images": 2}
     driver = webdriver.Chrome(options=chrome_options, service=ChromeService(ChromeDriverManager().install()))
-    driver.set_page_load_timeout(120)
-    driver.set_script_timeout(120)
+    driver.set_page_load_timeout(240)
+    driver.set_script_timeout(240)
     return driver
 
-def scrape_job_info(job_link, browser):
+def scrape_job_info(job_link):
     try:
+        browser = create_webdriver()
         browser.get(job_link)
         time.sleep(5)  # Adding a delay to ensure the page loads completely
         html_content = browser.page_source
@@ -84,21 +93,27 @@ def scrape_job_info(job_link, browser):
     except Exception as e:
         logging.error(f"Error in scrape_job_info: {e}")
         return None
+    finally:
+        if 'browser' in locals():
+            browser.quit()
 
 def scroll_page(browser):
-    # Scroll down to load more profiles
-    browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(5)
-
-    # Click "Show more results" button if it appears
     try:
-        show_more_button = browser.find_element(By.XPATH, '//button[contains(@class, "scaffold-finite-scroll__load-button")]')
-        if show_more_button:
-            show_more_button.click()
-            logging.info("Show more results button found and clicked")
-            time.sleep(5)
+        # Scroll down to load more profiles
+        browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(5)
+
+        # Click "Show more results" button if it appears
+        try:
+            show_more_button = browser.find_element(By.XPATH, '//button[contains(@class, "scaffold-finite-scroll__load-button")]')
+            if show_more_button:
+                show_more_button.click()
+                logging.info("Show more results button found and clicked")
+                time.sleep(5)
+        except Exception as e:
+            logging.info("No 'Show more results' button found")
     except Exception as e:
-        logging.info("No 'Show more results' button found")
+        logging.error(f"Error in scroll_page: {e}")
 
 def run_page(url, browser):
     retries = 3
@@ -119,7 +134,7 @@ def run_page(url, browser):
             logging.info(f"Found {alumni_count} alumni")
 
             profile_links = set()
-            while len(profile_links) < alumni_count:
+            while len(profile_links) < 1500:
                 scroll_page(browser)
                 content = browser.page_source
                 soup = BeautifulSoup(content, 'html.parser')
@@ -131,60 +146,8 @@ def run_page(url, browser):
                         href_value = a_tag['href']
                         profile_links.add(href_value)
                 logging.info(f"Collected {len(profile_links)} profile links")
-                logging.info(profile_links)
 
-            job_data = {}
-            for profile in profile_links:
-                logging.info(profile)
-                browser.get(profile)
-                time.sleep(5)
-                html_content = browser.page_source
-                soup = BeautifulSoup(html_content, "html.parser")
-                job_section = soup.find("section", class_="artdeco-card pv-open-to-carousel-card pv-open-to-carousel-card--enrolled pv-open-to-carousel-card--single")
-                profile_job_data = []
-                if job_section:
-                    job_link_element = job_section.find("a", class_="app-aware-link")
-                    if job_link_element:
-                        job_link = job_link_element["href"]
-                        if re.match(r".*/jobs/view/.*", job_link):
-                            profile_job_data.append(job_link)
-                    else:
-                        job_links = soup.find_all("a", class_="job-card-container__link")
-                        job_posting_links = [link["href"] for link in job_links]
-                        for job_link in job_posting_links:
-                            if re.match(r".*/jobs/view/.*", job_link):
-                                job_link = "https://www.linkedin.com" + job_link
-                                profile_job_data.append(job_link)
-                job_data[profile] = profile_job_data
-            logging.info(f"Job data: {job_data}")
-
-            job_info_dict = {}
-            for profile_url, job_urls in job_data.items():
-                for job_url in job_urls:
-                    job_info = scrape_job_info(job_url, browser)
-                    if job_info:
-                        job_info_dict[job_url] = job_info
-
-            job_list = []
-            for profile_url, job_urls in job_data.items():
-                for job_url in job_urls:
-                    if job_url in job_info_dict:
-                        job_info = job_info_dict[job_url]
-                        job_object = {
-                            "title": job_info.get("job_title"),
-                            "salary": job_info.get("salary_range"),
-                            "skills": job_info.get("skills"),
-                            "description": job_info.get("job_description"),
-                            "alumni_profile_link": profile_url,
-                            "job_link": job_url,
-                            "location": job_info.get("location"),
-                            "level": job_info.get("level"),
-                            "company": job_info.get("company")
-                        }
-                        job_list.append(job_object)
-            logging.info(f"Job list: {job_list}")
-
-            return job_list
+            return profile_links
         except Exception as e:
             logging.error(f"Error in run_page: {e}")
             if attempt < retries - 1:
@@ -195,69 +158,104 @@ def run_page(url, browser):
                 return []
 
 def run_data(university_name):
-    logging.info("Starting scraping process")
-    browser = create_webdriver()
-    browser.get("https://www.linkedin.com/login")
+    try:
+        logging.info("Starting scraping process")
+        browser = create_webdriver()  # Use create_webdriver to allow browser pop-up
+        browser.get("https://www.linkedin.com/login")
 
-    # Read credentials from config.txt
-    with open("config.txt") as file:
-        lines = file.readlines()
-        username = lines[0].strip()
-        password = lines[1].strip()
+        # Read credentials from config.txt
+        with open("config.txt") as file:
+            lines = file.readlines()
+            username = lines[0].strip()
+            password = lines[1].strip()
 
-    elementID = browser.find_element(By.ID, 'username')
-    elementID.send_keys(username)
-    logging.info("Entered username")
+        elementID = browser.find_element(By.ID, 'username')
+        elementID.send_keys(username)
+        logging.info("Entered username")
 
-    elementID = browser.find_element(By.ID, 'password')
-    elementID.send_keys(password)
-    logging.info("Entered password")
+        elementID = browser.find_element(By.ID, 'password')
+        elementID.send_keys(password)
+        logging.info("Entered password")
 
-    elementID.submit()
-    logging.info("Submitted login form")
+        elementID.submit()
+        logging.info("Submitted login form")
 
-    if "checkpoint" in browser.current_url:
-        logging.info("Security verification required")
+        if "checkpoint" in browser.current_url:
+            logging.info("Security verification required")
 
-        # Add a sleep call to give you time to verify on the phone
-        logging.info("Please verify the login attempt on your phone...")
-        time.sleep(20)  # 20 seconds pause for phone verification
+            # Add a sleep call to give you time to verify on the phone
+            logging.info("Please verify the login attempt on your phone...")
+            time.sleep(20)  # 20 seconds pause for phone verification
 
-        # Check if login was successful after phone verification
-        if "feed" not in browser.current_url:
-            logging.error("Verification failed")
-            logging.info("HTML content of the page:")
-            logging.info(browser.page_source)
-            return
-        else:
-            logging.info("Verification successful via phone")
+            # Check if login was successful after phone verification
+            if "feed" not in browser.current_url:
+                logging.error("Verification failed")
+                logging.info("HTML content of the page:")
+                logging.info(browser.page_source)
+                return
+            else:
+                logging.info("Verification successful via phone")
 
-    base_url = f"https://www.linkedin.com/school/{university_name}/people/"
-    job_list = run_page(base_url, browser)
+        base_url = f"https://www.linkedin.com/school/{university_name}/people/"
+        profile_links = run_page(base_url, browser)
 
-    browser.quit()
-    os.makedirs("output", exist_ok=True)
-    logging.info(f"Saving data to data/{university_name}/refined_data.csv")
+        browser.quit()
+    except Exception as e:
+        logging.error(f"Error in run_data: {e}")
+        return
 
-    output_file = os.path.join("output", f"data/{university_name}/refined_data.csv")
-    with open(output_file, mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Title', 'Salary', 'Skills', 'Description', 'Alumni Profile Link', 'Job Link', 'Location', 'Level', 'Company'])
-        for job in job_list:
-            writer.writerow([job['title'], job['salary'], job['skills'], job['description'], job['alumni_profile_link'], job['job_link'], job['location'], job['level'], job['company']])
-    logging.info("Scraping process completed successfully")
-    logging.info(f"Data saved to {output_file}")
+    # Save profile links to profiles.csv
+    try:
+        os.makedirs(f"data/{university_name}", exist_ok=True)
+        profiles_file = f"data/{university_name}/profiles.csv"
+        with open(profiles_file, mode='w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Profile Link'])
+            for link in profile_links:
+                writer.writerow([link])
+        logging.info(f"Profile links saved to {profiles_file}")
+    except Exception as e:
+        logging.error(f"Error in saving profile links: {e}")
 
-def docker_driver():
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
+    job_data = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_url = {executor.submit(scrape_job_info, profile): profile for profile in profile_links}
+        for future in as_completed(future_to_url):
+            profile = future_to_url[future]
+            try:
+                job_info = future.result()
+                if job_info:
+                    job_data[profile] = job_info
+            except Exception as e:
+                logging.error(f"Error occurred while processing profile {profile}: {e}")
 
-    # Initialize the Chrome driver with options
-    service = ChromeService(executable_path=ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    return driver
+    job_list = []
+    for profile_url, job_info in job_data.items():
+        job_object = {
+            "title": job_info.get("job_title"),
+            "salary": job_info.get("salary_range"),
+            "skills": job_info.get("skills"),
+            "description": job_info.get("job_description"),
+            "alumni_profile_link": profile_url,
+            "job_link": job_info.get("job_link"),
+            "location": job_info.get("location"),
+            "level": job_info.get("level"),
+            "company": job_info.get("company")
+        }
+        job_list.append(job_object)
+    logging.info(f"Job list: {job_list}")
 
-# if __name__ == "__main__":
-#     run_data("university-of-georgia")
+    try:
+        output_file = f"data/{university_name}/refined_data.csv"
+        with open(output_file, mode='w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            writer.writerow(['Title', 'Salary', 'Skills', 'Description', 'Alumni Profile Link', 'Job Link', 'Location', 'Level', 'Company'])
+            for job in job_list:
+                writer.writerow([job['title'], job['salary'], job['skills'], job['description'], job['alumni_profile_link'], job['job_link'], job['location'], job['level'], job['company']])
+        logging.info("Scraping process completed successfully")
+        logging.info(f"Data saved to {output_file}")
+    except Exception as e:
+        logging.error(f"Error in saving job data: {e}")
+
+if __name__ == "__main__":
+    run_data("university-of-georgia")
