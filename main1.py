@@ -13,6 +13,13 @@ from typing import List
 import uuid
 import linkedin_scraper
 import chatgpt_processing
+from fastapi import File, UploadFile, Form, Query
+import boto3
+from botocore.exceptions import ClientError
+from fastapi import HTTPException
+from fastapi import File, UploadFile, Form, Query
+from fastapi.responses import StreamingResponse
+import io
 
 app = FastAPI()
 
@@ -26,7 +33,10 @@ app.add_middleware(
 
 # DynamoDB client
 dynamodb = boto3.resource('dynamodb', region_name='us-east-2')
+s3_client = boto3.client('s3', region_name='us-east-2')
+
 favorite_jobs_table = dynamodb.Table('FavoriteJobs')
+user_resumes_table = dynamodb.Table('UserResumes')
 jobs_table = dynamodb.Table('universityatbuffalo_jobs')
 
 class Code(BaseModel):
@@ -224,3 +234,74 @@ async def get_all_jobs():
         return {"jobs": response.get('Items', [])}
     except ClientError as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving jobs: {e.response['Error']['Message']}")
+
+@app.post("/upload_resume_profile_picture/")
+async def upload_resume_profile_picture(username: str = Query(...), email: str = Form(...), resume: UploadFile = File(None), profile_picture: UploadFile = File(None)):
+
+    resume_url, profile_picture_url = None, None
+
+    # Upload resume to S3
+    if resume:
+        resume_key = f"resumes/{username}/{resume.filename}"
+        try:
+            s3_client.upload_fileobj(resume.file, 'usersresume', resume_key)
+            resume_url = f"https://{s3_client.meta.endpoint_url}/usersresume/{resume_key}"
+        except ClientError as e:
+            return {"message": "Failed to upload resume", "error": str(e)}
+
+    # Upload profile picture to S3
+    if profile_picture:
+        picture_key = f"profile_pictures/{username}/{profile_picture.filename}"
+        try:
+            s3_client.upload_fileobj(profile_picture.file, 'usersresume', picture_key)
+            profile_picture_url = f"https://{s3_client.meta.endpoint_url}/usersresume/{picture_key}"
+        except ClientError as e:
+            return {"message": "Failed to upload profile picture", "error": str(e)}
+
+    # Update DynamoDB with the URLs and initial resume summary
+    try:
+        user_resumes_table.put_item(Item={
+            'user_id': username,  # Ensure this key matches your DynamoDB primary key setup
+            'email': email,
+            'resume_url': resume_url,
+            'profile_picture_url': profile_picture_url,
+            'resume_summary': "XYZ"  # Initial resume summary
+        })
+        return {"message": "User profile updated successfully"}
+    except ClientError as e:
+        return {"message": "Failed to update user profile in DynamoDB", "error": str(e)}
+
+    return {"message": "Upload completed successfully"}
+
+@app.get("/fetch_resume/{user_id}")
+async def fetch_resume(user_id: str):
+    try:
+        response = user_resumes_table.get_item(Key={'user_id': user_id})
+        if 'Item' in response:
+            return {
+                "resume_url": response['Item'].get('resume_url', 'No resume uploaded'),
+                "resume_summary": response['Item'].get('resume_summary', 'No summary available')
+            }
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving resume: {e.response['Error']['Message']}")
+
+@app.get("/fetch_profile_picture/{user_id}")
+async def fetch_profile_picture(user_id: str):
+    try:
+        response = user_resumes_table.get_item(Key={'user_id': user_id})
+        if 'Item' in response and 'profile_picture_url' in response['Item']:
+            profile_picture_url = response['Item']['profile_picture_url']
+            bucket_name = 'usersresume'
+            key = profile_picture_url.split(f'{bucket_name}/')[-1]
+
+            try:
+                s3_response = s3_client.get_object(Bucket=bucket_name, Key=key)
+                return StreamingResponse(io.BytesIO(s3_response['Body'].read()), media_type="image/jpeg")
+            except ClientError as e:
+                raise HTTPException(status_code=500, detail=f"Error retrieving profile picture from S3: {e.response['Error']['Message']}")
+        else:
+            raise HTTPException(status_code=404, detail="Profile picture not found")
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving profile picture URL: {e.response['Error']['Message']}")
