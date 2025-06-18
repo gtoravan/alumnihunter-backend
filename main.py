@@ -1,3 +1,4 @@
+import logging
 import threading
 import time
 
@@ -14,9 +15,18 @@ import boto3
 from botocore.exceptions import ClientError
 from typing import List, Optional
 import io
+import base64
+
+import shutil
+
+from graditude.csv_utils import STORAGE_DIR, list_uploaded_files
+from graditude.automation import run_automation
+
 
 import chatgpt_processing
 import linkedin_scraper
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -307,27 +317,46 @@ async def fetch_profile_picture(user_id: str):
     except ClientError as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving profile picture URL: {e.response['Error']['Message']}")
 
-RECALL_AI_API_KEY = ''
+
+
+
+
+RECALL_AI_API_KEY = '26f9c65d08358716d652747d23658023eba1534a'
 RECALL_AI_BASE_URL = 'https://us-west-2.recall.ai/api/v1'  # Adjust based on your region
 RECORDING_INFO_FILE = 'bot_recording_info.csv'
 
 class ZoomInvite(BaseModel):
     zoomUrl: str
 
-def send_bot_to_meeting(meeting_url):
+silent_mp3_b64 = "SUQzAwAAAAA..."
+
+def send_bot_to_meeting(meeting_url, audio_ws_url):
     headers = {
         'Authorization': f'Token {RECALL_AI_API_KEY}',
         'Content-Type': 'application/json',
     }
     data = {
         'meeting_url': meeting_url,
-        'bot_name': 'Agent Vinod'
+        'bot_name': 'Vinod',
+        'real_time_media': {
+            'websocket_audio_destination_url': audio_ws_url,
+        },
+        'automatic_audio_output': {
+            'in_call_recording':
+                {'data':
+                    {
+                    'kind': 'mp3',
+                    'b64_data': silent_mp3_b64
+                    }
+                }
+        }
     }
     response = requests.post(f'{RECALL_AI_BASE_URL}/bot', headers=headers, json=data)
     if response.status_code in [200, 201]:  # Handle both 200 and 201 status codes
+        logging.info("Bot successfully connected to Recall AI")
         return response.json()['id']
     else:
-        print(f"Error in send_bot_to_meeting: {response.status_code} - {response.text}")
+        logging.error(f"Error in send_bot_to_meeting: {response.status_code} - {response.text}")
         raise HTTPException(status_code=response.status_code, detail=response.json())
 
 def retrieve_recording(bot_id):
@@ -349,13 +378,13 @@ def retrieve_recording(bot_id):
         time.sleep(10)
 
 @app.post("/vinod")
-async def invite_vinod(invite: ZoomInvite, background_tasks: BackgroundTasks):
+async def invite_vinod(invite: ZoomInvite):
     try:
-        bot_id = send_bot_to_meeting(invite.zoomUrl)
-        background_tasks.add_task(process_meeting, bot_id)
+        audio_ws_url = "ws://3.tcp.ngrok.io:29365"
+        bot_id = send_bot_to_meeting(invite.zoomUrl, audio_ws_url)
         return {"message": "Vinod invited successfully", "bot_id": bot_id}
     except Exception as e:
-        print(f"Exception in invite_vinod: {str(e)}")
+        logging.error(f"Exception in invite_vinod: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 def process_meeting(bot_id):
@@ -379,3 +408,40 @@ async def get_recording(bot_id: str):
     except Exception as e:
         print(f"Error in get_recording: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+class ConversationLog(BaseModel):
+    transcription: str
+    response: str
+
+@app.post("/log_conversation")
+async def log_conversation(log: ConversationLog):
+    logging.info(f"Transcription: {log.transcription}")
+    logging.info(f"GPT Response: {log.response}")
+    return {"message": "Conversation logged successfully"}
+
+
+
+@app.post("/graditude/upload")
+async def upload_csv(file: UploadFile = File(...)):
+    path = os.path.join(STORAGE_DIR, file.filename)
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"message": "File uploaded", "filename": file.filename}
+
+@app.get("/graditude/files")
+def get_files():
+    return {"files": list_uploaded_files()}
+
+@app.post("/graditude/run-automation")
+def trigger_automation(filename: str = Query(...)):
+    try:
+        result = run_automation(filename)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/twilio/inbound")
+async def twilio_inbound(request: Request):
+    body = await request.body()
+    headers = dict(request.headers)
+    return await server.handle_inbound_call(body, headers)

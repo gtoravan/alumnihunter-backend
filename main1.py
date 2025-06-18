@@ -1,25 +1,19 @@
 import threading
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Form, File, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import os
 import csv
 import pandas as pd
 import boto3
 from botocore.exceptions import ClientError
-from typing import List
-import uuid
-import linkedin_scraper
-import chatgpt_processing
-from fastapi import File, UploadFile, Form, Query
-import boto3
-from botocore.exceptions import ClientError
-from fastapi import HTTPException
-from fastapi import File, UploadFile, Form, Query
-from fastapi.responses import StreamingResponse
+from typing import List, Optional
 import io
+
+import chatgpt_processing
+import linkedin_scraper
 
 app = FastAPI()
 
@@ -123,7 +117,7 @@ async def say_hello(name: str):
 @app.get("/run_data/{page_number}")
 async def run_data_endpoint(page_number: int):
     # Ensure directory exists
-    os.makedirs(f"data/university1", exist_ok=True)
+    os.makedirs(f"data/GeorgiaTech", exist_ok=True)
     # Get data from run_data function
     thread = threading.Thread(target=linkedin_scraper.run_data, args=(page_number,))
     thread.start()
@@ -236,8 +230,12 @@ async def get_all_jobs():
         raise HTTPException(status_code=500, detail=f"Error retrieving jobs: {e.response['Error']['Message']}")
 
 @app.post("/upload_resume_profile_picture/")
-async def upload_resume_profile_picture(username: str = Query(...), email: str = Form(...), resume: UploadFile = File(None), profile_picture: UploadFile = File(None)):
-
+async def upload_resume_profile_picture(
+        username: str = Form(...),
+        email: str = Form(...),
+        resume: Optional[UploadFile] = File(None),
+        profile_picture: Optional[UploadFile] = File(None)
+):
     resume_url, profile_picture_url = None, None
 
     # Upload resume to S3
@@ -305,3 +303,17 @@ async def fetch_profile_picture(user_id: str):
             raise HTTPException(status_code=404, detail="Profile picture not found")
     except ClientError as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving profile picture URL: {e.response['Error']['Message']}")
+
+class ZoomInvite(BaseModel):
+    zoomUrl: str
+
+@app.post("/vinod")
+async def invite_vinod(invite: ZoomInvite):
+    try:
+        zoom_url = invite.zoomUrl
+        # Here you would add the logic to join the Zoom call using the provided URL.
+        # For now, we'll just log the URL to demonstrate.
+        print(f"Joining Zoom call at URL: {zoom_url}")
+        return {"message": "Vinod invited successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
